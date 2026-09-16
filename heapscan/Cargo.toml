@@ -14,5 +14,6 @@ path = "src/demo_target.rs"
 
 [dependencies]
 libc = "0.2"
+errno = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

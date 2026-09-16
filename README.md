@@ -30,6 +30,20 @@ cargo build --release        # in heapscan/
 ./target/release/heapscan demo
 ```
 
+**Outcome (verified 2026-09-16):** `heapscan demo` runs the full pipeline
+end-to-end and exits 0 — the dummy target's next tick prints
+`greeting=Pwned, heap!`, proving the written payload landed in a live
+process's heap. `dump` emits valid JSON (74 heap objects on the demo target:
+26 strings, 2 vtables, 6 object candidates), and the `write` is observable
+on the target's stdout.
+
+Debugging the original "write silently failed" symptom found a real
+kernel-contract bug: on Linux, `POKEDATA` was called with the word to write
+passed as the *address* argument (glibc forwards `data` untouched, so the
+kernel wrote word `0` to the unmapped payload-word address → EIO); the macOS
+`PT_READ_D` path had a sibling bug (it returned the return code instead of the
+word stored in `data`). Both fixed in [heapscan/src/platform.rs](heapscan/src/platform.rs).
+
 Caveats: the PID must be owned by you (or run as root); on Linux
 `/proc/sys/kernel/yama/ptrace_scope=1` blocks attaching to processes you did not
 spawn; `dump` stops the target via `ptrace` for the duration of the scan.

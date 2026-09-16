@@ -112,14 +112,21 @@ pub fn run(args: &[String]) -> i32 {
                 found = Some(line);
                 break;
             }
-            Ok(_) => {}
+            Ok(line) => {
+                eprintln!("target line: {line}");
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
             Err(_) => break,
         }
     }
     match found {
         Some(line) => println!("target tick after write: {line}"),
         None => {
-            eprintln!("error: target never printed the written payload within 8s");
+            match child.try_wait() {
+                Ok(Some(s)) => eprintln!("error: target exited before printing payload (exit {s:?}); last target lines above"),
+                Ok(None) => eprintln!("error: target still running but never printed the payload within 8s"),
+                Err(e) => eprintln!("error: failed to query target status: {e}"),
+            }
             child.kill().ok();
             return 6;
         }

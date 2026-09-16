@@ -4,15 +4,11 @@
 //! Linux: `/proc/<pid>/maps` for regions; `ptrace(PTRACE_*)` (5-arg, `long` words).
 
 use std::io;
-use std::os::raw::c_int;
+use std::os::raw::{c_int, c_void};
+use errno::Errno;
 
 #[allow(non_camel_case_types)]
 type pid_t = libc::pid_t;
-
-extern "C" {
-    #[link_name = "errno"]
-    static mut errno: c_int;
-}
 
 /// One VM region of the target process.
 #[derive(Debug, Clone)]
@@ -44,13 +40,13 @@ pub fn is_heap_region(r: &Region) -> bool {
 // ---------------------------------------------------------------------------
 
 #[cfg(target_os = "linux")]
-const PTRACE_ATTACH: c_int = 16;
+const PTRACE_ATTACH: u32 = 16;
 #[cfg(target_os = "linux")]
-const PTRACE_DETACH: c_int = 17;
+const PTRACE_DETACH: u32 = 17;
 #[cfg(target_os = "linux")]
-const PTRACE_PEEKDATA: c_int = 2;
+const PTRACE_PEEKDATA: u32 = 2;
 #[cfg(target_os = "linux")]
-const PTRACE_POKEDATA: c_int = 5;
+const PTRACE_POKEDATA: u32 = 5;
 
 #[cfg(target_os = "macos")]
 const PT_ATTACHEXC: c_int = 14;
@@ -73,16 +69,19 @@ fn last_os_error() -> String {
 #[cfg(target_os = "linux")]
 fn raw_read(pid: pid_t, addr: u64) -> Result<u64, String> {
     unsafe {
-        libc::errno = 0;
+        errno::set_errno(Errno(0));
         let r = libc::ptrace(
             PTRACE_PEEKDATA,
             pid,
-            addr as *mut _,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            addr as *mut c_void,
+            std::ptr::null_mut::<c_void>(),
+            std::ptr::null_mut::<c_void>(),
         );
-        if r == -1 && libc::errno != 0 {
-            return Err(format!("read at {:#x}: {}", addr, last_os_error()));
+        if r == -1 {
+            let e = errno::errno();
+            if e.0 != 0 {
+                return Err(format!("read at {:#x}: {}", addr, io::Error::from_raw_os_error(e.0)));
+            }
         }
         Ok(r as u64)
     }
@@ -90,13 +89,15 @@ fn raw_read(pid: pid_t, addr: u64) -> Result<u64, String> {
 
 #[cfg(target_os = "linux")]
 fn raw_write(pid: pid_t, addr: u64, value: u64) -> Result<(), String> {
+    // Linux POKEDATA: `data` is the word *value itself* (not a pointer);
+    // the kernel copies `data` to `addr`. glibc forwards `data` untouched.
     unsafe {
         let r = libc::ptrace(
             PTRACE_POKEDATA,
             pid,
-            addr as *mut _,
-            &value as *const u64 as *mut _,
-            std::ptr::null_mut(),
+            addr as *mut c_void,
+            value,
+            std::ptr::null_mut::<c_void>(),
         );
         if r != 0 {
             return Err(format!("write at {:#x}: {}", addr, last_os_error()));
@@ -107,13 +108,18 @@ fn raw_write(pid: pid_t, addr: u64, value: u64) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn raw_read(pid: pid_t, addr: u64) -> Result<u32, String> {
+    // BSD PT_READ_D: stores the word in `data` and returns 0 on success.
     unsafe {
-        errno = 0;
-        let r = libc::ptrace(PT_READ_D, pid, addr as *mut _, 0);
-        if r == -1 && errno != 0 {
-            return Err(format!("read at {:#x}: {}", addr, last_os_error()));
+        errno::set_errno(Errno(0));
+        let mut w: u32 = 0;
+        let r = libc::ptrace(PT_READ_D, pid, addr as *mut c_void, &mut w);
+        if r == -1 {
+            let e = errno::errno();
+            if e.0 != 0 {
+                return Err(format!("read at {:#x}: {}", addr, io::Error::from_raw_os_error(e.0)));
+            }
         }
-        Ok(r as u32)
+        Ok(w)
     }
 }
 
@@ -171,7 +177,7 @@ impl Tracee {
         let r = unsafe {
             #[cfg(target_os = "linux")]
             {
-                libc::ptrace(PTRACE_ATTACH, pid, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())
+                libc::ptrace(PTRACE_ATTACH, pid, std::ptr::null_mut::<c_void>(), std::ptr::null_mut::<c_void>(), std::ptr::null_mut::<c_void>())
             }
             #[cfg(target_os = "macos")]
             {
@@ -205,7 +211,7 @@ impl Tracee {
             let r = unsafe {
                 #[cfg(target_os = "linux")]
                 {
-                    libc::ptrace(PTRACE_DETACH, self.pid, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())
+                    libc::ptrace(PTRACE_DETACH, self.pid, std::ptr::null_mut::<c_void>(), std::ptr::null_mut::<c_void>(), std::ptr::null_mut::<c_void>())
                 }
                 #[cfg(target_os = "macos")]
                 {
@@ -373,21 +379,7 @@ fn list_regions_macos(pid: i32) -> Result<Vec<Region>, String> {
     Ok(regions)
 }
 
+#[cfg(target_os = "macos")]
 fn is_perms(s: &str) -> bool {
     s.chars().all(|c| matches!(c, 'r' | 'w' | 'x' | '-'))
-}
-
-fn parse_size(s: &str) -> u64 {
-    let split = s
-        .as_bytes()
-        .iter()
-        .position(|b| !b.is_ascii_digit())
-        .unwrap_or(s.len());
-    let num: u64 = s[..split].parse().unwrap_or(0);
-    match &s[split..] {
-        "K" => num * 1_024,
-        "M" => num * 1_024 * 1_024,
-        "G" => num * 1_024 * 1_024 * 1_024,
-        _ => num,
-    }
 }
