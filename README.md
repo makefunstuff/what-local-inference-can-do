@@ -95,3 +95,33 @@ make                 # in softrender/
 ./build/softrender   # interactive
 SDL_VIDEO_DRIVER=dummy ./build/softrender --frames 4 --dump frame.ppm
 ```
+
+### 4. clank — minimal unix-style local-inference harness
+
+* Model: qwen 3.8 27b (Qwen3.8-27B GSQ-RCO IQ3_XXS)
+* Code: [clank/](clank/)
+
+Minimal Rust CLI that drives a local llama-server (OpenAI-compatible
+endpoint, SSE streaming, tool calling) the unix way: prompt and context
+arrive via argv/stdin, only data leaves on stdout, breadcrumbs and errors
+on stderr. The model may call four read-only filesystem tools
+(`read_file`, `list_dir`, `search`, `stat`) — deliberately no shell and no
+editing. Context is a tree: piped stdin is one raw-text node, `-c FILE`
+loads a saved JSON tree of text/file/nested nodes, so
+`rg "userData" src/ | clank -m "what does this do?"` composes like any
+pipeline. `--jsonl` emits `tool_call`/`tool_result`/`assistant` events for
+`jq`; SIGPIPE is restored, so `clank ... | head` dies cleanly.
+
+```sh
+cargo build --release   # in clank/
+rg "userData" local/clank/fixtures | ./clank/target/release/clank -m "what does this code do?"
+./clank/target/release/clank -c local/clank/fixtures/ctx.json -m "summarize the context"
+echo "list the fixtures dir" | ./clank/target/release/clank --jsonl | jq -c
+```
+
+**Outcome (verified 2026-09-16):** the piped `rg` example runs the full
+tool loop end-to-end — the model called `read_file` on the matched files,
+answered on stdout, exit 0. Tree context from a JSON file renders text,
+file, and nested nodes in document order; `--jsonl` output is valid
+JSONL; `clank -m "..." | head -1` exits 0 with no Rust panic; no prompt
+gives exit 2, an unreadable context file exit 1.

@@ -1,0 +1,17 @@
+[package]
+name = "clank"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal unix-style local-inference harness: stdin/stdout CLI with read-only filesystem tools"
+
+[[bin]]
+name = "clank"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }
+regex = "1"
+libc = "0.2"
