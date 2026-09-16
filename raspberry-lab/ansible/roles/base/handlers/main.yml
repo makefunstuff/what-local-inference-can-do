@@ -1,0 +1,10 @@
+---
+- name: Restart systemd-networkd after netplan change
+  ansible.builtin.systemd:
+    name: systemd-networkd
+    state: restarted
+
+- name: Restart chrony after config change
+  ansible.builtin.systemd:
+    name: chrony
+    state: restarted

@@ -1,0 +1,5 @@
+---
+- name: Restart llama-server after config change
+  ansible.builtin.systemd:
+    name: llama-server
+    state: restarted

@@ -1,0 +1,4 @@
+---
+# Fallbacks — role requires group_vars to define these; assert task will fail loud
+node_ip: ""
+node_hostname: ""

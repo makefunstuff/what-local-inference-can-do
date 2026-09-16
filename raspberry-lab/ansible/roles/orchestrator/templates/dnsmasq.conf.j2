@@ -1,0 +1,7 @@
+# dnsmasq configuration for isolated raspberry-lab domain
+domain=raspberry-lab
+dhcp-range=10.10.0.50,10.10.0.100,24h
+address=/rpi-01.raspberry-lab/10.10.0.10
+address=/rpi-02.raspberry-lab/10.10.0.11
+address=/rpi-03.raspberry-lab/10.10.0.12
+no-resolv  # no upstream DNS in isolated lab

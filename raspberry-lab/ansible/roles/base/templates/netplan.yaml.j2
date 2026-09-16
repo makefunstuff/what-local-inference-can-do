@@ -1,0 +1,11 @@
+# Netplan static config for isolated lab node
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: no
+      dhcp6: no
+      addresses:
+        - "{{ node_ip }}/24"
+      accept-ra: no  # no router in isolated lab
+      nameservers: {}

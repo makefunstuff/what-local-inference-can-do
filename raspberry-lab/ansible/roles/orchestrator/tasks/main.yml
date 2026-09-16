@@ -1,0 +1,63 @@
+---
+# orchestrator role — dnsmasq, chrony reference, SSH seed, health check on head node
+
+- name: Assert head variables are set
+  ansible.builtin.assert:
+    that:
+      - node_ip is defined and node_ip | length > 0
+      - node_hostname is defined and node_hostname | length > 0
+    fail_msg: "head variables must be set (check group_vars/head.yml)"
+
+- name: Install packages on head node (controller + services)
+  ansible.builtin.package:
+    name:
+      - ansible-core
+      - dnsmasq
+      - chrony
+    state: present
+  when: not lab_apt_preseeded
+  # If preseeded, this task is a no-op; packages already in image
+
+- name: Deploy dnsmasq configuration
+  ansible.builtin.template:
+    src: dnsmasq.conf.j2
+    dest: /etc/dnsmasq.d/raspberry-lab.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart dnsmasq
+
+- name: Ensure .ssh directory exists
+  ansible.builtin.file:
+    path: "~{{ ansible_user }}/.ssh"
+    state: directory
+    owner: "{{ ansible_user }}"
+    mode: 0700
+
+- name: Seed authorized_keys with operator public key
+  ansible.builtin.lineinfile:
+    path: "~{{ ansible_user }}/.ssh/authorized_keys"
+    line: "{{ lab_pubkey }}"
+    state: present
+    create: true
+    owner: "{{ ansible_user }}"
+    mode: 0600
+    insertafter: EOF
+
+- name: Verify SSH control path to peer nodes
+  ansible.builtin.shell: >
+    ssh -o StrictHostKeyChecking=no -o BatchMode=yes
+    -o ConnectTimeout=5 {{ ansible_user }}@{{ hostvars[item].ansible_host }} true
+  loop: "{{ groups.storage + groups.inference }}"
+  register: ssh_verify
+  failed_when: ssh_verify.rc != 0
+  # Requires the head's key on the peers — written by the Raspberry Pi
+  # Imager at flash time (see README sequence, step 1).
+
+- name: Deploy lab health check script
+  ansible.builtin.template:
+    src: lab-check.sh.j2
+    dest: ~/raspberry-lab/lab-check.sh
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: 0755

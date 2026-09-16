@@ -1,0 +1,16 @@
+---
+# Isolated lab — no internet uplink
+all:
+  children:
+    head:
+      hosts:
+        rpi-01:
+          ansible_host: 10.10.0.10
+    storage:
+      hosts:
+        rpi-02:
+          ansible_host: 10.10.0.11
+    inference:
+      hosts:
+        rpi-03:
+          ansible_host: 10.10.0.12

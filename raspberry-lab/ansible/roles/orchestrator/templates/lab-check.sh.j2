@@ -1,0 +1,10 @@
+#!/bin/bash
+# Lab health check — runs on the head node; exit nonzero on first failure
+STORAGE_IP="{{ hostvars['rpi-02'].ansible_host }}"
+INFERENCE_IP="{{ hostvars['rpi-03'].ansible_host }}"
+
+ping -c1 -W2 "$STORAGE_IP" >/dev/null 2>&1 || { echo "FAIL: ping $STORAGE_IP" >&2; exit 1; }
+curl -fsS "http://$STORAGE_IP:9000/minio/health/live" >/dev/null 2>&1 || { echo "FAIL: minio health on $STORAGE_IP" >&2; exit 1; }
+curl -fsS "http://$INFERENCE_IP:8080/health" >/dev/null 2>&1 || { echo "FAIL: llama /health on $INFERENCE_IP" >&2; exit 1; }
+
+echo "OK: all checks passed"

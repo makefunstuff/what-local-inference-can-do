@@ -1,0 +1,6 @@
+---
+# Fallbacks — role requires group_vars to define these; assert task will fail loud
+llama_port: ""
+llama_model_file: ""
+llama_context: ""
+llama_threads: ""

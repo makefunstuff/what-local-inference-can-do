@@ -1,0 +1,7 @@
+---
+node_ip: 10.10.0.12
+node_hostname: rpi-03
+llama_port: 8080
+llama_model_file: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
+llama_context: 2048
+llama_threads: 4

@@ -1,0 +1,15 @@
+# llama-server systemd service unit
+[Unit]
+Description=llama.cpp Inference Server
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/srv/models
+ExecStart=/srv/llama-cpp/build/llama-server -m /srv/models/{{ llama_model_file }} --port {{ llama_port }} --ctx-size {{ llama_context }} --threads {{ llama_threads }} --host 0.0.0.0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

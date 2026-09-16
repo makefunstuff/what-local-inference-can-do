@@ -1,0 +1,9 @@
+---
+# Bootstrap: apply base role to all nodes (no facts gathered — preseeded image)
+- name: Bootstrap all nodes
+  hosts: all
+  gather_facts: false
+  become: true
+
+  roles:
+    - base

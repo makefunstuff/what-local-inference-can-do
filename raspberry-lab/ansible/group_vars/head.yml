@@ -1,0 +1,4 @@
+---
+node_ip: 10.10.0.10
+node_hostname: rpi-01
+lab_pubkey: ssh-ed25519 AAAA... PLACEHOLDER_REPLACE_ME lab@operator

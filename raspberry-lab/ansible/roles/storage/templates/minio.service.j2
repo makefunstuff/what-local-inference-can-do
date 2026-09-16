@@ -1,0 +1,17 @@
+# MinIO systemd service unit
+[Unit]
+Description=MinIO Object Storage
+After=network.target
+
+[Service]
+Type=simple
+User=minio
+Group=minio
+ExecStart=/usr/local/bin/minio server /srv/minio --address :{{ minio_port }} --console-address :{{ minio_console_port }}
+Environment=MINIO_ROOT_USER={{ minio_root_user }}
+Environment=MINIO_ROOT_PASSWORD={{ minio_root_pass }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

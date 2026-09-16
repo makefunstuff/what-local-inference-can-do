@@ -1,0 +1,8 @@
+---
+node_ip: 10.10.0.11
+node_hostname: rpi-02
+minio_port: 9000
+minio_console_port: 9001
+minio_bucket: lab
+minio_root_user: labadmin
+minio_root_pass: CHANGE_ME_01  # rotate after first login

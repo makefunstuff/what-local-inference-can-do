@@ -1,0 +1,78 @@
+---
+# base role — idempotent host bootstrap for isolated lab
+
+- name: Assert node_ip and node_hostname are set
+  ansible.builtin.assert:
+    that:
+      - node_ip is defined and node_ip | length > 0
+      - node_hostname is defined and node_hostname | length > 0
+    fail_msg: "node_ip and node_hostname must be set (check group_vars)"
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ node_hostname }}.{{ lab_domain }}"
+
+- name: Seed /etc/hosts with all lab nodes (regex-guarded, idempotent)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ item.ip }}\\s+{{ item.fqdn }}"
+    line: "{{ item.ip }} {{ item.fqdn }}"
+    state: present
+  loop:
+    - { ip: "10.10.0.10", fqdn: "rpi-01.raspberry-lab rpi-01" }
+    - { ip: "10.10.0.11", fqdn: "rpi-02.raspberry-lab rpi-02" }
+    - { ip: "10.10.0.12", fqdn: "rpi-03.raspberry-lab rpi-03" }
+    - { ip: "{{ staging_ip }}", fqdn: "staging.raspberry-lab staging" }
+  no_log: false
+
+- name: Deploy netplan static config
+  ansible.builtin.template:
+    src: netplan.yaml.j2
+    dest: /etc/netplan/60-lab.yaml
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart systemd-networkd
+
+- name: Configure chrony — head node as reference clock (local stratum 10)
+  ansible.builtin.template:
+    src: chrony-head.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: 0644
+  when: inventory_hostname == "rpi-01"
+  notify: restart chrony
+
+- name: Configure chrony — non-head nodes point to reference clock
+  ansible.builtin.template:
+    src: chrony-client.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: 0644
+  when: inventory_hostname != "rpi-01"
+  notify: restart chrony
+
+- name: Point apt at staging offline mirror (only when not preseeded)
+  ansible.builtin.apt:
+    deb: "http://{{ staging_ip }}:{{ staging_http_port }}/apt raspi-bookworm main"
+    state: present
+    update_cache: true
+  when: not lab_apt_preseeded
+  # Requires an aptly/debmirror tree under /srv/apt on the staging laptop.
+- name: Install packages from offline mirror (skip if preseeded)
+  ansible.builtin.apt:
+    name:
+      - git
+      - curl
+      - wget
+      - ansible-core
+      - dnsmasq
+      - chrony
+      - minio
+    state: present
+    allow_downgrade: false
+  when: not lab_apt_preseeded
+  # Offline mirror layout on staging node:
+  #   /srv/files/{git,curl,wget,ansible-core,dnsmasq,chrony,minio}*.deb

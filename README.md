@@ -47,3 +47,30 @@ word stored in `data`). Both fixed in [heapscan/src/platform.rs](heapscan/src/pl
 Caveats: the PID must be owned by you (or run as root); on Linux
 `/proc/sys/kernel/yama/ptrace_scope=1` blocks attaching to processes you did not
 spawn; `dump` stops the target via `ptrace` for the duration of the scan.
+
+### 2. raspberry-lab — 3-RPi isolated homelab (design)
+
+* Model: qwen 3.8 27b (Qwen3.8-27B GSQ-RCO IQ3_XXS, main design); qwen 3.6 35B A3B (Qwen3.6-35B-A3B IQ3_XXS, ansible roles via subagent)
+* Code: [raspberry-lab/](raspberry-lab/)
+
+Design-only experiment: an abstract, fully isolated 3-node Raspberry Pi lab
+provisioned with Ansible — no internet, no cloud, one flat 10.10.0.0/24.
+Three roles: rpi-01 (head: ansible controller, dnsmasq, chrony reference),
+rpi-02 (storage: MinIO S3, bucket `lab`), rpi-03 (inference: llama.cpp
+`llama-server` running Qwen2.5-1.5B Q4, the local-inference hook into this
+repo's theme). A transient staging laptop (10.10.0.2) transports the model
+GGUF and the llama.cpp tarball during bootstrap, then is unplugged. The
+flashed OS image is preseeded so the lab makes zero apt calls; two
+playbooks (`bootstrap.yml`, `deploy-lab.yml`) drive four roles.
+
+```sh
+# from rpi-01 (head), in raspberry-lab/ansible/
+ansible-playbook playbooks/bootstrap.yml
+ansible-playbook playbooks/deploy-lab.yml
+```
+
+**Outcome (design verified 2026-09-16):** architecture, network topology,
+and the complete ansible stack (inventory, group vars, 4 roles, 2
+playbooks, 27 files) are complete and internally consistent against one
+frozen variable contract. No hardware was exercised — this is an abstract
+lab, so all claims are design decisions, not verified runs.

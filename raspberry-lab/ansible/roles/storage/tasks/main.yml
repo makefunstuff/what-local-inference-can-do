@@ -1,0 +1,88 @@
+---
+# storage role — MinIO S3 service on isolated lab node
+
+- name: Assert minio variables are set
+  ansible.builtin.assert:
+    that:
+      - minio_port is defined and minio_port | length > 0
+      - minio_console_port is defined and minio_console_port | length > 0
+      - minio_bucket is defined and minio_bucket | length > 0
+      - minio_root_user is defined and minio_root_user | length > 0
+      - minio_root_pass is defined and minio_root_pass | length > 0
+    fail_msg: "minio variables must be set (check group_vars/storage.yml)"
+
+- name: Fetch MinIO binary from staging file server
+  ansible.builtin.get_url:
+    url: "http://{{ staging_ip }}:{{ staging_http_port }}{{ staging_files }}/minio"
+    dest: /usr/local/bin/minio
+    mode: 0755
+    force: false
+    # Staging laptop serves /srv over a plain HTTP file server.
+
+- name: Fetch MinIO client (mc) binary from staging file server
+  ansible.builtin.get_url:
+    url: "http://{{ staging_ip }}:{{ staging_http_port }}{{ staging_files }}/mc"
+    dest: /usr/local/bin/mc
+    mode: 0755
+    force: false
+
+- name: Create minio system user
+  ansible.builtin.user:
+    name: minio
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create MinIO data directory
+  ansible.builtin.file:
+    path: /srv/minio
+    state: directory
+    owner: minio
+    group: minio
+    mode: 0700
+
+- name: Deploy MinIO systemd service
+  ansible.builtin.template:
+    src: minio.service.j2
+    dest: /etc/systemd/system/minio.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart minio
+- name: Start MinIO service
+  ansible.builtin.systemd:
+    name: minio
+    state: started
+  # Must be running before the mc commands; the handler still restarts
+  # the unit at end of play if the template changed.
+
+- name: Configure MinIO alias (runs while marker absent)
+  ansible.builtin.command: >
+    mc alias set lab {{ minio_root_user }}:{{ minio_root_pass }}
+    http://localhost:{{ minio_port }}
+  args:
+    creates: /etc/.mc-lab-alias
+  register: mc_alias
+  failed_when: mc_alias.rc not in [0, 1]
+  # rc 0 = alias created; rc 1 = alias already exists — both acceptable
+
+- name: Mark MinIO alias configured
+  ansible.builtin.file:
+    path: /etc/.mc-lab-alias
+    state: touch
+  when: mc_alias.rc in [0, 1]
+
+- name: Create MinIO bucket (runs while marker absent)
+  ansible.builtin.command: >
+    mc mb lab/{{ minio_bucket }}
+  args:
+    creates: /etc/.mc-lab-bucket
+  register: mc_mb
+  failed_when: mc_mb.rc not in [0, 1]
+  # rc 0 = bucket created; rc 1 = bucket already exists — both acceptable
+
+- name: Mark MinIO bucket configured
+  ansible.builtin.file:
+    path: /etc/.mc-lab-bucket
+    state: touch
+  when: mc_mb.rc in [0, 1]

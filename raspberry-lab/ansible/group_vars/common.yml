@@ -1,0 +1,13 @@
+---
+lab_domain: raspberry-lab
+lab_net_cidr: 10.10.0.0/24
+lab_gw_ip: 10.10.0.1  # unused, documented — no gateway in isolated lab
+staging_ip: 10.10.0.2
+staging_files: /srv/files
+staging_models: /srv/models
+staging_http_port: 8000
+lab_apt_preseeded: true  # packages already in the flashed image
+ansible_user: pi
+ansible_connection: ssh
+ansible_become: true
+chrony_ref_ip: 10.10.0.10

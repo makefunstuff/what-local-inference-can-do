@@ -1,0 +1,5 @@
+---
+- name: Restart dnsmasq after config change
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: restarted

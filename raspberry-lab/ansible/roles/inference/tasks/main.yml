@@ -1,0 +1,66 @@
+---
+# inference role — llama.cpp llama-server on isolated lab node
+
+- name: Assert llama variables are set
+  ansible.builtin.assert:
+    that:
+      - llama_port is defined and llama_port | length > 0
+      - llama_model_file is defined and llama_model_file | length > 0
+      - llama_context is defined and llama_context | length > 0
+      - llama_threads is defined and llama_threads | length > 0
+    fail_msg: "llama variables must be set (check group_vars/inference.yml)"
+
+- name: Create /srv/models and /srv/llama-cpp directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+  loop:
+    - /srv/models
+    - /srv/llama-cpp
+
+- name: Fetch llama-cpp tarball from staging file server
+  ansible.builtin.get_url:
+    url: "http://{{ staging_ip }}:{{ staging_http_port }}{{ staging_files }}/llama-cpp.tar.gz"
+    dest: /srv/llama-cpp/llama-cpp.tar.gz
+    force: false
+
+- name: Extract llama-cpp tarball
+  ansible.builtin.unarchive:
+    src: /srv/llama-cpp/llama-cpp.tar.gz
+    dest: /srv/llama-cpp
+    creates: /srv/llama-cpp/build
+
+- name: Build llama-server from source (make -j{{ llama_threads }})
+  ansible.builtin.command: make -j{{ llama_threads }}
+  args:
+    chdir: /srv/llama-cpp
+    creates: /srv/llama-cpp/build/llama-server
+  # make still runs on re-run but succeeds no-op when build/llama-server exists
+
+- name: Fetch model file from staging file server
+  ansible.builtin.get_url:
+    url: "http://{{ staging_ip }}:{{ staging_http_port }}{{ staging_models }}/{{ llama_model_file }}"
+    dest: "/srv/models/{{ llama_model_file }}"
+    force: false
+
+- name: Deploy llama-server systemd service
+  ansible.builtin.template:
+    src: llama-server.service.j2
+    dest: /etc/systemd/system/llama-server.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart llama-server
+- name: Start llama-server service
+  ansible.builtin.systemd:
+    name: llama-server
+    state: started
+  # Must be running before the health check; the handler still restarts
+  # the unit at end of play if the template changed.
+
+- name: Health check — verify llama-server responds
+  ansible.builtin.command: curl -fsS http://localhost:{{ llama_port }}/health
+  register: llama_health
+  failed_when: llama_health.rc != 0
+  # Proves server is answering; run after service started

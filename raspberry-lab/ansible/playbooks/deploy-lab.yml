@@ -1,0 +1,25 @@
+---
+# Deploy lab services in dependency order: head first, then storage, then inference
+- name: Configure head node (orchestrator)
+  hosts: head
+  gather_facts: false
+  become: true
+
+  roles:
+    - orchestrator
+
+- name: Configure storage node (MinIO)
+  hosts: storage
+  gather_facts: false
+  become: true
+
+  roles:
+    - storage
+
+- name: Configure inference node (llama-server)
+  hosts: inference
+  gather_facts: false
+  become: true
+
+  roles:
+    - inference
