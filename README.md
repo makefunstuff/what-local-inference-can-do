@@ -74,3 +74,24 @@ and the complete ansible stack (inventory, group vars, 4 roles, 2
 playbooks, 27 files) are complete and internally consistent against one
 frozen variable contract. No hardware was exercised — this is an abstract
 lab, so all claims are design decisions, not verified runs.
+
+### 3. softrender — software renderer in C on SDL3
+
+* Model: qwen 3.8 27b (Qwen3.8-27B GSQ-RCO IQ3_XXS)
+* Code: [softrender/](softrender/)
+
+CPU rasterizer in C on SDL3: filled triangles (per-vertex color,
+barycentric interpolation) and filled rectangles drawn directly into the
+window's backing surface — no GPU, no shaders. Demo scene: a rotating
+equilateral triangle plus a flat-color triangle orbiting it, deterministic
+per frame index. Headless-verified: `make check` renders frame 3 twice at
+640x480 with `SDL_VIDEO_DRIVER=dummy` and the dumps are byte-identical; an
+independent Python oracle (pure re-implementation, same expression order)
+byte-compares its PPM against the C output at 640x480 frame 3 and
+320x240 frame 6.
+
+```sh
+make                 # in softrender/
+./build/softrender   # interactive
+SDL_VIDEO_DRIVER=dummy ./build/softrender --frames 4 --dump frame.ppm
+```
